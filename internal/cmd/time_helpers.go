@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -52,14 +53,19 @@ func getCalendarLocation(ctx context.Context, svc *calendar.Service, calendarID 
 }
 
 // getUserTimezone fetches the timezone from the user's primary calendar.
+// When no primary calendar exists (e.g. pure service-account mode), it
+// falls back to UTC so that calendar commands remain functional.
 func getUserTimezone(ctx context.Context, svc *calendar.Service) (*time.Location, error) {
 	cal, err := svc.CalendarList.Get("primary").Context(ctx).Do()
 	if err != nil {
+		if isNotFoundAPIError(err) {
+			slog.Warn("primary calendar not found, falling back to UTC (expected in pure SA mode)")
+			return time.UTC, nil
+		}
 		return nil, fmt.Errorf("failed to get primary calendar: %w", err)
 	}
 
 	if cal.TimeZone == "" {
-		// Fall back to UTC if no timezone set
 		return time.UTC, nil
 	}
 
