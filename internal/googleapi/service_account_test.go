@@ -7,10 +7,12 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func generateTestSAKeyJSON(t *testing.T, clientEmail string) []byte {
+func generateTestSAKeyJSON(t *testing.T, clientEmail string) []byte { //nolint:unparam // test helper; callers always use saEmail but the parameter keeps intent clear
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -64,6 +66,58 @@ func TestNewServiceAccountTokenSource_Impersonation(t *testing.T) {
 
 	if ts == nil {
 		t.Fatalf("expected non-nil token source")
+	}
+}
+
+func TestTokenSourceForServiceAccountScopes_GOG_SA_KEY_PATH(t *testing.T) {
+	const saEmail = "sa@test-project.iam.gserviceaccount.com"
+	const userEmail = "user@example.com"
+
+	keyJSON := generateTestSAKeyJSON(t, saEmail)
+
+	// Write SA key to a temp file.
+	dir := t.TempDir()
+
+	keyPath := filepath.Join(dir, "sa-key.json")
+
+	if err := os.WriteFile(keyPath, keyJSON, 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+
+	// Set GOG_SA_KEY_PATH so tokenSourceForServiceAccountScopes reads
+	// the key from this path instead of deriving it from the email.
+	t.Setenv("GOG_SA_KEY_PATH", keyPath)
+
+	ts, path, ok, err := tokenSourceForServiceAccountScopes(
+		context.Background(), userEmail,
+		[]string{"https://www.googleapis.com/auth/calendar"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+
+	if ts == nil {
+		t.Fatal("expected non-nil token source")
+	}
+
+	if path != keyPath {
+		t.Fatalf("expected path=%q, got %q", keyPath, path)
+	}
+}
+
+func TestTokenSourceForServiceAccountScopes_GOG_SA_KEY_PATH_NotFound(t *testing.T) {
+	t.Setenv("GOG_SA_KEY_PATH", "/nonexistent/sa-key.json")
+
+	_, _, _, err := tokenSourceForServiceAccountScopes(
+		context.Background(), "user@example.com",
+		[]string{"https://www.googleapis.com/auth/calendar"},
+	)
+	if err == nil {
+		t.Fatal("expected error for nonexistent key path")
 	}
 }
 
