@@ -77,7 +77,7 @@ func TestTokenSourceForServiceAccountScopes_GOG_SA_KEY_PATH(t *testing.T) {
 	// Write SA key to a temp file.
 	dir := t.TempDir()
 	keyPath := filepath.Join(dir, "sa-key.json")
-	if err := os.WriteFile(keyPath, keyJSON, 0600); err != nil {
+	if err := os.WriteFile(keyPath, keyJSON, 0o600); err != nil {
 		t.Fatalf("write key file: %v", err)
 	}
 
