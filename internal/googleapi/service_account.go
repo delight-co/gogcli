@@ -32,6 +32,23 @@ var newServiceAccountTokenSource = func(ctx context.Context, keyJSON []byte, sub
 }
 
 func tokenSourceForServiceAccountScopes(ctx context.Context, email string, scopes []string) (oauth2.TokenSource, string, bool, error) {
+	// GOG_SA_KEY_PATH allows callers (e.g. proxy wrappers) to specify
+	// the SA key file directly, decoupling the account email (used as
+	// the impersonation subject) from the key file location.
+	if envPath := os.Getenv("GOG_SA_KEY_PATH"); envPath != "" {
+		data, readErr := os.ReadFile(envPath) //nolint:gosec // caller-provided path
+		if readErr != nil {
+			return nil, "", false, fmt.Errorf("read service account key from GOG_SA_KEY_PATH: %w", readErr)
+		}
+
+		ts, tokenErr := newServiceAccountTokenSource(ctx, data, email, scopes)
+		if tokenErr != nil {
+			return nil, "", false, tokenErr
+		}
+
+		return ts, envPath, true, nil
+	}
+
 	saPath, err := config.ServiceAccountPath(email)
 	if err != nil {
 		return nil, "", false, fmt.Errorf("service account path: %w", err)
