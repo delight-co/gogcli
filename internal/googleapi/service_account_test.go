@@ -92,7 +92,6 @@ func TestTokenSourceForServiceAccountScopes_GOG_SA_KEY_PATH(t *testing.T) {
 		context.Background(), userEmail,
 		[]string{"https://www.googleapis.com/auth/calendar"},
 	)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
