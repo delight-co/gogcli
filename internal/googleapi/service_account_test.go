@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func generateTestSAKeyJSON(t *testing.T, clientEmail string) []byte {
+func generateTestSAKeyJSON(t *testing.T, clientEmail string) []byte { //nolint:unparam // test helper; callers always use saEmail but the parameter keeps intent clear
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -72,11 +72,14 @@ func TestNewServiceAccountTokenSource_Impersonation(t *testing.T) {
 func TestTokenSourceForServiceAccountScopes_GOG_SA_KEY_PATH(t *testing.T) {
 	const saEmail = "sa@test-project.iam.gserviceaccount.com"
 	const userEmail = "user@example.com"
+
 	keyJSON := generateTestSAKeyJSON(t, saEmail)
 
 	// Write SA key to a temp file.
 	dir := t.TempDir()
+
 	keyPath := filepath.Join(dir, "sa-key.json")
+
 	if err := os.WriteFile(keyPath, keyJSON, 0o600); err != nil {
 		t.Fatalf("write key file: %v", err)
 	}
@@ -89,15 +92,19 @@ func TestTokenSourceForServiceAccountScopes_GOG_SA_KEY_PATH(t *testing.T) {
 		context.Background(), userEmail,
 		[]string{"https://www.googleapis.com/auth/calendar"},
 	)
+
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
+
 	if ts == nil {
 		t.Fatal("expected non-nil token source")
 	}
+
 	if path != keyPath {
 		t.Fatalf("expected path=%q, got %q", keyPath, path)
 	}
