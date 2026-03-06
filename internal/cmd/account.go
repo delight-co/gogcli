@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -76,7 +77,35 @@ func requireAccount(flags *RootFlags) (string, error) {
 		}
 	}
 
-	return "", usage("missing --account (or set GOG_ACCOUNT, set default via `gog auth manage`, or store exactly one token)")
+	// Fall back to GOG_SA_KEY_PATH: read client_email from the SA key file.
+	if envPath := strings.TrimSpace(os.Getenv("GOG_SA_KEY_PATH")); envPath != "" {
+		if email, err := readSAClientEmail(envPath); err == nil && email != "" {
+			return email, nil
+		}
+	}
+
+	// Fall back to service account key files on disk.
+	if emails, err := config.ListServiceAccountEmails(); err == nil && len(emails) == 1 {
+		if v := strings.TrimSpace(emails[0]); v != "" {
+			return v, nil
+		}
+	}
+
+	return "", usage("missing --account (or set GOG_ACCOUNT, set default via `gog auth manage`, or store exactly one token/service-account)")
+}
+
+func readSAClientEmail(path string) (string, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // caller-provided path
+	if err != nil {
+		return "", err
+	}
+	var sa struct {
+		ClientEmail string `json:"client_email"`
+	}
+	if err := json.Unmarshal(data, &sa); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(sa.ClientEmail), nil
 }
 
 func resolveAccountAlias(value string) (string, bool, error) {

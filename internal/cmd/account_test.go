@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -182,5 +184,70 @@ func TestRequireAccount_MissingWhenMultipleTokensAndNoDefault(t *testing.T) {
 	_, err := requireAccount(flags)
 	if err == nil {
 		t.Fatalf("expected error")
+	}
+}
+
+func TestRequireAccount_UsesSAKeyPath(t *testing.T) {
+	t.Setenv("GOG_ACCOUNT", "")
+	t.Setenv("GOG_SA_KEY_PATH", "")
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	// Write SA key file to GOG_SA_KEY_PATH
+	saKey := filepath.Join(t.TempDir(), "sa.json")
+	if err := os.WriteFile(saKey, []byte(`{"type":"service_account","client_email":"sa@proj.iam.gserviceaccount.com"}`), 0o600); err != nil {
+		t.Fatalf("write sa key: %v", err)
+	}
+	t.Setenv("GOG_SA_KEY_PATH", saKey)
+
+	prev := openSecretsStoreForAccount
+	t.Cleanup(func() { openSecretsStoreForAccount = prev })
+	openSecretsStoreForAccount = func() (secrets.Store, error) {
+		return &fakeSecretsStore{}, nil
+	}
+
+	flags := &RootFlags{}
+	got, err := requireAccount(flags)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got != "sa@proj.iam.gserviceaccount.com" {
+		t.Fatalf("got %q, want sa@proj.iam.gserviceaccount.com", got)
+	}
+}
+
+func TestRequireAccount_UsesSingleSAKeyFile(t *testing.T) {
+	t.Setenv("GOG_ACCOUNT", "")
+	t.Setenv("GOG_SA_KEY_PATH", "")
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	// Place a single SA key file in gogcli config dir
+	dir, err := config.EnsureDir()
+	if err != nil {
+		t.Fatalf("EnsureDir: %v", err)
+	}
+	enc := base64.RawURLEncoding.EncodeToString([]byte("sa@proj.iam.gserviceaccount.com"))
+	if err := os.WriteFile(filepath.Join(dir, "sa-"+enc+".json"), []byte(`{"type":"service_account"}`), 0o600); err != nil {
+		t.Fatalf("write sa file: %v", err)
+	}
+
+	prev := openSecretsStoreForAccount
+	t.Cleanup(func() { openSecretsStoreForAccount = prev })
+	openSecretsStoreForAccount = func() (secrets.Store, error) {
+		return &fakeSecretsStore{}, nil
+	}
+
+	flags := &RootFlags{}
+	got, err := requireAccount(flags)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got != "sa@proj.iam.gserviceaccount.com" {
+		t.Fatalf("got %q, want sa@proj.iam.gserviceaccount.com", got)
 	}
 }
